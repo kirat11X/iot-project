@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NeuroLog - Session History</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#121222",
+                        "on-primary-fixed": "#100069",
+                        "surface-container-low": "#1a1a2b",
+                        "background": "#121222",
+                        "on-background": "#e3e0f8",
+                        "inverse-surface": "#e3e0f8",
+                        "surface-container-highest": "#333345",
+                        "tertiary-fixed": "#ffdcc6",
+                        "surface-container": "#1e1e2f",
+                        "surface-bright": "#38374a",
+                        "on-surface": "#e3e0f8",
+                        "on-tertiary-container": "#461f00",
+                        "tertiary": "#ffb785",
+                        "on-surface-variant": "#c7c4d8",
+                        "secondary": "#adc6ff",
+                        "on-secondary-container": "#e6ecff",
+                        "surface-tint": "#c4c0ff",
+                        "tertiary-container": "#db761f",
+                        "on-tertiary": "#502500",
+                        "secondary-fixed-dim": "#adc6ff",
+                        "outline": "#918fa1",
+                        "inverse-primary": "#4f44e2",
+                        "error-container": "#93000a",
+                        "secondary-fixed": "#d8e2ff",
+                        "primary": "#c4c0ff",
+                        "inverse-on-surface": "#2f2f40",
+                        "outline-variant": "#464555",
+                        "on-secondary": "#002e6a",
+                        "primary-fixed-dim": "#c4c0ff",
+                        "on-secondary-fixed": "#001a42",
+                        "surface": "#121222",
+                        "surface-container-lowest": "#0c0c1d",
+                        "on-error": "#690005",
+                        "on-primary-fixed-variant": "#3622ca",
+                        "on-primary": "#2000a4",
+                        "tertiary-fixed-dim": "#ffb785",
+                        "primary-fixed": "#e3dfff",
+                        "on-tertiary-fixed-variant": "#713700",
+                        "surface-variant": "#333345",
+                        "primary-container": "#8781ff",
+                        "on-secondary-fixed-variant": "#004395",
+                        "error": "#ffb4ab",
+                        "on-error-container": "#ffdad6",
+                        "secondary-container": "#0566d9",
+                        "on-primary-container": "#1b0091",
+                        "surface-container-high": "#29283a",
+                        "on-tertiary-fixed": "#301400"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: linear-gradient(135deg, rgba(135, 129, 255, 0.05) 0%, rgba(30, 30, 47, 1) 100%);
+            backdrop-filter: blur(12px);
+        }
+        .ghost-border {
+            border-top: 1px solid rgba(70, 69, 85, 0.3);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30 min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-[#0c0c1d]/80 backdrop-blur-xl fixed top-0 w-full z-50 border-b border-[#464555]/15 shadow-[0_0_20px_rgba(108,99,255,0.1)]">
+<div class="flex justify-between items-center px-6 py-4 w-full">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#6C63FF]" data-icon="neurology">neurology</span>
+<h1 class="text-xl font-bold text-[#e3e0f8] tracking-widest uppercase font-headline">NeuroLog</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="px-3 py-1 rounded-full bg-error-container/20 border border-error/30 flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+<span class="text-[10px] font-bold tracking-tighter text-error">LIVE</span>
+</div>
+</div>
+</div>
+</header>
+<main class="pt-24 px-6 max-w-5xl mx-auto">
+<!-- Filter Row -->
+<section class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div class="space-y-4">
+<h2 class="text-3xl font-headline font-bold tracking-tight text-on-surface">Session History</h2>
+<div class="flex p-1 bg-surface-container-low rounded-2xl w-fit">
+<button class="px-6 py-2 rounded-xl text-sm font-medium bg-surface-container-high text-primary shadow-sm">Today</button>
+<button class="px-6 py-2 rounded-xl text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">This Week</button>
+<button class="px-6 py-2 rounded-xl text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">This Month</button>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-[10px] uppercase tracking-widest font-semibold text-outline">Subject Identifier</label>
+<div class="flex items-center gap-3 px-4 py-3 bg-surface-container-lowest rounded-xl border border-outline-variant/30 min-w-[200px]">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="fingerprint">fingerprint</span>
+<span class="text-sm font-medium">STU-8842-X</span>
+<span class="material-symbols-outlined text-outline ml-auto text-sm" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</section>
+<!-- Session List -->
+<div class="space-y-6">
+<!-- Card 1: Low Stress -->
+<article class="glass-card rounded-3xl p-6 ghost-border shadow-xl group">
+<div class="flex flex-col lg:flex-row lg:items-center gap-8">
+<div class="flex-shrink-0 flex flex-col justify-center items-center lg:items-start border-b lg:border-b-0 lg:border-r border-outline-variant/10 pb-6 lg:pb-0 lg:pr-8">
+<span class="text-[10px] uppercase tracking-[0.2em] font-bold text-outline mb-1">Session Date</span>
+<time class="text-2xl font-headline font-bold text-on-surface">Dec 12</time>
+<time class="text-sm font-medium text-on-surface-variant">14:30 PM</time>
+</div>
+<div class="flex-grow grid grid-cols-2 md:grid-cols-4 gap-6 items-center">
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Duration</p>
+<p class="text-lg font-medium">1h 15m</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Avg Stress</p>
+<div class="flex items-center gap-2">
+<span class="text-2xl font-headline font-bold text-secondary">42</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary/10 text-secondary text-[10px] font-bold tracking-tight">LOW</span>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Peak Intensity</p>
+<p class="text-lg font-medium">15:10</p>
+</div>
+<div class="relative h-12 w-full max-w-[120px]">
+<img alt="Thumbnail stress curve" class="w-full h-full object-contain opacity-80" data-alt="abstract smooth low amplitude wave chart line glowing soft blue and cyan on dark background minimalist medical ui asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwJRAXebyHmcKBWUFp2CS8lUze2AGoHIxcbZpQkj5vehEuEA1vsubCDFGsugdENauEFT3YQUNcibrlrZLGhooTG_VNz5PeSo4R8AjEn2nZ90oAuDyZmnrgVtFKXjK3Xd5hP6Uc0dQw73_zyipcNqPdSbc6Gli_etQn3pO1P0hvVcH-sOPcu1vcmL8QqQhN7nL_kghTztSxCGiRmyLMdNMmHhlp9qrxf0AOQpXRbAsetlLdW4XdhuzuzPcYxg2d7PWOW0uXiWEltgjO"/>
+</div>
+</div>
+<div class="flex-shrink-0 pt-4 lg:pt-0">
+<button class="w-full lg:w-auto px-6 py-3 rounded-2xl bg-surface-container-high text-primary font-semibold text-sm hover:bg-primary hover:text-on-primary transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_15px_rgba(108,99,255,0.2)]">
+                            View Details
+                            <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Card 2: Moderate Stress -->
+<article class="glass-card rounded-3xl p-6 ghost-border shadow-xl group">
+<div class="flex flex-col lg:flex-row lg:items-center gap-8">
+<div class="flex-shrink-0 flex flex-col justify-center items-center lg:items-start border-b lg:border-b-0 lg:border-r border-outline-variant/10 pb-6 lg:pb-0 lg:pr-8">
+<span class="text-[10px] uppercase tracking-[0.2em] font-bold text-outline mb-1">Session Date</span>
+<time class="text-2xl font-headline font-bold text-on-surface">Dec 11</time>
+<time class="text-sm font-medium text-on-surface-variant">09:15 AM</time>
+</div>
+<div class="flex-grow grid grid-cols-2 md:grid-cols-4 gap-6 items-center">
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Duration</p>
+<p class="text-lg font-medium">55m</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Avg Stress</p>
+<div class="flex items-center gap-2">
+<span class="text-2xl font-headline font-bold text-tertiary">68</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary/10 text-tertiary text-[10px] font-bold tracking-tight">MOD</span>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Peak Intensity</p>
+<p class="text-lg font-medium">09:42</p>
+</div>
+<div class="relative h-12 w-full max-w-[120px]">
+<img alt="Thumbnail stress curve" class="w-full h-full object-contain opacity-80" data-alt="abstract jagged moderate amplitude wave chart line glowing amber and orange on dark background minimalist medical ui asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDbDx_BiKZmpjKqb4LB1RpDYj_3xnPLqMJ31Xlg_FqVHyAFfSBO7KvcgIe0TelKxbSspWIQfrCCySsGXtGzxZkWE1zQ12sr4AqKXm3vUHFe5bWrNDemTltzKCXUoirFm5QNvdsAhwRIgQMQmQbl51qbzTgRBpQ3yY4k_g8Z4KB-_wa-ZEJPCPUVvmaDqpqKIXo_raHHX1A7MVG56Vd6820qGhj1NfNp_4XztFx8TbVMHgnOPiOl-9c5MnOhoANL6FXn4qGxZi8U5Uhe"/>
+</div>
+</div>
+<div class="flex-shrink-0 pt-4 lg:pt-0">
+<button class="w-full lg:w-auto px-6 py-3 rounded-2xl bg-surface-container-high text-primary font-semibold text-sm hover:bg-primary hover:text-on-primary transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_15px_rgba(108,99,255,0.2)]">
+                            View Details
+                            <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Card 3: High Stress -->
+<article class="glass-card rounded-3xl p-6 ghost-border shadow-xl group border-l-4 border-error/50">
+<div class="flex flex-col lg:flex-row lg:items-center gap-8">
+<div class="flex-shrink-0 flex flex-col justify-center items-center lg:items-start border-b lg:border-b-0 lg:border-r border-outline-variant/10 pb-6 lg:pb-0 lg:pr-8">
+<span class="text-[10px] uppercase tracking-[0.2em] font-bold text-outline mb-1">Session Date</span>
+<time class="text-2xl font-headline font-bold text-on-surface">Dec 10</time>
+<time class="text-sm font-medium text-on-surface-variant">11:00 AM</time>
+</div>
+<div class="flex-grow grid grid-cols-2 md:grid-cols-4 gap-6 items-center">
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Duration</p>
+<p class="text-lg font-medium">1h 05m</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Avg Stress</p>
+<div class="flex items-center gap-2">
+<span class="text-2xl font-headline font-bold text-error">85</span>
+<span class="px-2 py-0.5 rounded-full bg-error/10 text-error text-[10px] font-bold tracking-tight">HIGH</span>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Peak Intensity</p>
+<p class="text-lg font-medium">11:25</p>
+</div>
+<div class="relative h-12 w-full max-w-[120px]">
+<img alt="Thumbnail stress curve" class="w-full h-full object-contain opacity-80" data-alt="abstract erratic high frequency sharp peaks wave chart line glowing vivid red on dark background minimalist medical ui asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCP7JRpcz3JW9VdwEKCa6gmzmBr6FGYrp2_QQoeT9_V0laZ4bVF0yFzZul5XhbuSmXMJseq0g1BH610jI-HlwMn3Up9xA4jSqRl6ReBGSIktG2CtloMT67jOrFSEiZNdwFxZHGChY9Y-cf1vRBLyGa3VEUB2cqd7GGGpbJDvzDSFb4aeZuH9-NX_ZcmAoTATFXa1XaLhOzDRiUOuh1i0Vg9va7C9ws2VwhYsA-WxCUTZ6JT4HH-HYybo-BhB0M_mZeGEDctuXrf1EWB"/>
+</div>
+</div>
+<div class="flex-shrink-0 pt-4 lg:pt-0">
+<button class="w-full lg:w-auto px-6 py-3 rounded-2xl bg-surface-container-high text-primary font-semibold text-sm hover:bg-primary hover:text-on-primary transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_40px_rgba(255,180,171,0.15)]">
+                            View Details
+                            <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</article>
+</div>
+<!-- Footer Stats Sneak Peek -->
+<section class="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 opacity-60">
+<div class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10 flex items-center gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="analytics">analytics</span>
+<div>
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Monthly Trend</p>
+<p class="text-sm font-medium">+12% Stability</p>
+</div>
+</div>
+<div class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10 flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary" data-icon="verified">verified</span>
+<div>
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Data Integrity</p>
+<p class="text-sm font-medium">99.8% Medical Grade</p>
+</div>
+</div>
+<div class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10 flex items-center gap-4">
+<span class="material-symbols-outlined text-tertiary" data-icon="cloud_done">cloud_done</span>
+<div>
+<p class="text-[10px] uppercase tracking-widest font-semibold text-outline">Cloud Status</p>
+<p class="text-sm font-medium">Synchronized</p>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#0c0c1d]/90 backdrop-blur-2xl rounded-t-[2rem] border-t border-[#464555]/20 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+<div class="flex flex-col items-center justify-center text-[#c7c4d8] opacity-60 hover:opacity-100 transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="monitor_heart">monitor_heart</span>
+<span class="font-['Inter'] text-[10px] uppercase tracking-widest font-semibold mt-1">Live</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#c4c0ff] bg-[#1e1e2f] rounded-2xl px-6 py-2 shadow-[0_0_15px_rgba(108,99,255,0.2)] cursor-pointer">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-['Inter'] text-[10px] uppercase tracking-widest font-semibold mt-1">History</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#c7c4d8] opacity-60 hover:opacity-100 transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="query_stats">query_stats</span>
+<span class="font-['Inter'] text-[10px] uppercase tracking-widest font-semibold mt-1">Analysis</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#c7c4d8] opacity-60 hover:opacity-100 transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-['Inter'] text-[10px] uppercase tracking-widest font-semibold mt-1">Settings</span>
+</div>
+</nav>
+</body></html>

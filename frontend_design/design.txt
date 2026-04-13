@@ -1,0 +1,166 @@
+Project: Biometric Stress Logging & Analysis System — Mobile React App (converted to APK)
+Stack: React (with Hooks), TailwindCSS or styled-components, Recharts or Chart.js for data visualization, React Router for navigation
+
+🎨 Theme & Design Language
+Use a dark blue / purple / black color palette throughout. The app should feel like a medical-grade wearable dashboard — sleek, clinical, and data-forward.
+Background:       #0A0A1A (near-black with blue tint)
+Surface/Cards:    #0F1535 (dark navy)
+Accent Primary:   #6C63FF (electric violet/purple)
+Accent Secondary: #3B82F6 (electric blue)
+Stress High:      #EF4444 (red)
+Stress Medium:    #F59E0B (amber)
+Stress Low:       #10B981 (green)
+Text Primary:     #F0F4FF
+Text Secondary:   #94A3B8
+Borders/Dividers: #1E2A4A
+Glow effects:     use box-shadow with accent colors at 30-40% opacity
+All cards should have a subtle glassy effect — backdrop-filter: blur, semi-transparent backgrounds, and a faint glowing border using the accent color. Use rounded-xl corners, not sharp edges. Icons from Lucide React. Fonts: Inter or Space Grotesk (Google Fonts).
+
+📱 App Structure & Screens
+Build a bottom tab navigation bar with 4 tabs (since this is mobile/APK):
+[ Live Monitor ] [ History ] [ Analysis ] [ Settings ]
+
+Screen 1 — Live Monitor (Home/Dashboard)
+This is the primary real-time screen. It should have:
+Top Bar:
+
+App name/logo on the left: "NeuroLog" or "StressSync" (stylized with accent color)
+Student ID / Session label on the right (e.g., "Session #04 — Active")
+A pulsing green dot indicating live connection status to the ESP32
+
+Hero Section — Stress Level Indicator:
+
+A large circular gauge/ring (donut-style) in the center of the screen
+The ring fills based on stress level percentage (0–100%)
+Color of the ring dynamically changes: green → amber → red based on stress level
+Inside the circle: display the current Stress Score as a large number (e.g., "72") with the label "Stress Index" below it
+Below the circle: a badge showing the stress state — LOW / MODERATE / HIGH / CRITICAL with corresponding color
+
+Vitals Cards Row (horizontal scroll or 2x2 grid):
+Four metric cards, each with:
+
+An icon (heart, activity wave, droplet, thermometer)
+Metric label
+Current live value
+A small sparkline (mini line chart) showing the last 30 seconds of data
+
+The four metrics are:
+
+Heart Rate — value in BPM, icon: heart, data from MAX30102
+SpO2 — blood oxygen percentage, icon: activity, data from MAX30102
+GSR Level — skin conductance in µS (microsiemens), icon: zap/lightning, data from GSR sensor
+HRV — heart rate variability in ms, icon: pulse wave
+
+LED Status Indicator:
+
+A row showing the current LED state on the physical device
+Three colored dot indicators labeled: Calm (Green) / Alert (Yellow) / Stressed (Red)
+The active one should glow/pulse using CSS animation
+
+Session Info Bar:
+
+Session start time, elapsed duration, number of stress spikes detected so far
+
+
+Screen 2 — History
+Top Section:
+
+Date picker / filter row (Today / This Week / This Month / Custom)
+Student ID selector dropdown
+
+Session List:
+
+Scrollable list of past sessions as cards
+Each card shows:
+
+Date & time of session
+Duration
+Average Stress Score (with color badge)
+Peak stress moment (timestamp)
+A tiny thumbnail line chart of the session's stress curve
+A View Details button
+
+
+
+On tapping a session card, expand or navigate to a Session Detail View showing:
+
+Full-size multi-line chart: GSR, Heart Rate, Stress Index all plotted over time on the same time axis (each line a different color)
+Annotated spike markers on the chart — vertical dashed lines at moments when stress exceeded threshold
+Summary stats: Avg HR, Avg GSR, Max Stress, Min Stress, HRV trend
+Export button (CSV or share as image)
+
+
+Screen 3 — Analysis
+This screen provides classroom-level insights, not just individual. It's for the teacher/researcher view.
+Top Toggle: Individual | Class Average — switches the view
+In Individual Mode:
+
+Radar/spider chart with 5 axes: Heart Rate Stability, GSR Reactivity, HRV, Stress Frequency, Recovery Speed
+Each axis scored 0–10 based on session history
+A short auto-generated text summary below (e.g., "Student showed elevated GSR responses between 10:15–10:45 AM, coinciding with 3 detected stress peaks. Heart rate remained elevated for 12 minutes post-spike.")
+
+In Class Average Mode:
+
+A heatmap-style grid: rows = students (anonymized as S1, S2…), columns = time intervals (every 5 or 10 minutes of a class session)
+Cell color = average stress level in that interval (green → red gradient)
+Helps visualize which moments in a class session were most stressful across the room
+Below the heatmap: a bar chart showing "Most Stressful Moments" ranked by time interval
+A classroom stress trend line over the week
+
+Insight Cards:
+
+3–4 auto-generated insight cards at the bottom with icons and text, e.g.:
+
+🔴 "Peak classroom stress detected at 10:30 AM on Wednesday"
+🟡 "5 out of 12 students showed elevated GSR during the quiz period"
+🟢 "Average recovery time improved by 18% compared to last week"
+
+
+
+
+Screen 4 — Settings
+
+Device Connection: Bluetooth or WiFi connection panel to pair with ESP32. Show device name, MAC address, signal strength bar, Connect/Disconnect button
+Student Profile: Name, ID, Grade/Class input fields
+Alert Thresholds: Sliders to set custom thresholds for:
+
+GSR spike threshold (µS)
+Heart Rate alert limit (BPM)
+Stress Index warning level (%)
+
+
+Sampling Rate: Toggle for data collection frequency (1s / 2s / 5s)
+Notifications: Toggle to enable/disable in-app alerts when stress goes critical
+Data & Privacy: Clear session data button, export all data button
+About section: Project info, sensor specs (ESP32, MAX30102, GSR), firmware version
+
+
+📡 Data & State Management
+
+Use React Context + useReducer (or Zustand) for global state
+Simulate live data using setInterval with randomized-but-realistic mock data during development (GSR: 2–20 µS, HR: 60–110 BPM, SpO2: 94–100%)
+Structure real data flow to accept WebSocket or REST polling from the ESP32 backend (leave a clearly commented placeholder hook: useESP32Data())
+All charts should animate smoothly as new data points arrive — use a rolling 60-second window for live charts, auto-scrolling left
+
+
+✨ Micro-interactions & Polish
+
+Stress gauge ring should animate smoothly on value change (CSS transition, not instant jump)
+Stress spike moments: flash a subtle red overlay on the screen for 1–2 seconds when stress goes critical
+All cards should have hover/press states (scale down slightly on tap — mobile feel)
+Loading states: use skeleton screens (animated dark shimmer), not spinners
+Empty states (no sessions yet): show an illustration of a wearable device with text "Start your first session"
+Bottom nav active tab: show glow under the active icon using accent color
+Use smooth page transitions between tabs (slide or fade)
+
+
+📐 Layout Constraints (Mobile APK)
+
+Design for portrait mobile, max-width 430px
+Use vh units carefully — account for bottom nav height (~64px) and top safe area
+All tap targets minimum 44x44px
+No horizontal overflow anywhere
+Test layout for both short screens (iPhone SE ~667px) and tall screens (Galaxy S series ~900px)
+
+
+Use this prompt as the complete specification. Build screen by screen, starting with the Live Monitor, then wire up the navigation, then complete remaining screens. Prioritize the chart components and stress gauge as they are the visual centerpiece of the app.

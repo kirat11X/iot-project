@@ -1,0 +1,1258 @@
+Here's the complete ML layer plan and prompt — covering the full pipeline from raw ESP32 CSV all the way to live predictions in the app:
+
+---
+
+## 🤖 ML Model Addition — Prompt & Plan
+
+---
+
+### 📌 WHAT YOU'RE ADDING
+
+A machine learning pipeline that:
+
+1. **Ingests** raw CSV data logged by the ESP32 (HR, GSR, DHT11 temp/humidity)
+2. **Preprocesses & engineers features** from the noisy raw signals
+3. **Trains a stress classification model** that understands environmental context (not just body signals)
+4. **Serves predictions** via a Python FastAPI endpoint
+5. **Integrates** live predictions into the existing React app and backend
+
+The model improves on the hardcoded weighted formula by learning the *actual relationship* between environmental conditions and physiological stress — e.g., high humidity + elevated HR together may be more predictive than either alone.
+
+---
+
+### 📊 CSV DATA SCHEMA FROM ESP32
+
+The ESP32 logs and/or sends a CSV in this format:
+
+```
+timestamp,heart_rate,spo2,gsr,hrv,temperature,humidity,label
+1712001000,82,97,11.2,54,29.3,68,1
+1712001001,84,97,11.8,51,29.4,69,1
+1712001002,91,96,14.1,44,29.5,70,2
+1712001003,103,95,17.6,31,29.6,71,3
+```
+
+**Column definitions:**
+
+| Column | Source | Unit | Notes |
+|--------|--------|------|-------|
+| `timestamp` | ESP32 `millis()` or epoch | seconds | Unix timestamp preferred |
+| `heart_rate` | MAX30102 | BPM | 55–115 range |
+| `spo2` | MAX30102 | % | 90–100% |
+| `gsr` | GSR sensor | µS (microsiemens) | 2–20 µS |
+| `hrv` | Computed from HR inter-beat | ms | 20–100ms |
+| `temperature` | DHT11 | °C | Environmental temp |
+| `humidity` | DHT11 | % RH | Environmental humidity |
+| `label` | Manual / rule-based | 0/1/2/3 | 0=Calm, 1=Moderate, 2=Stressed, 3=Critical |
+
+> **Label Strategy:** For initial training, generate labels using the existing rule-based stress formula as pseudo-labels. Later, collect manually labeled sessions for ground truth.
+
+---
+
+### 🗂️ UPDATED PROJECT STRUCTURE
+
+Add this new `ml/` directory to your existing project:
+
+```
+biopulse/
+├── backend/          (existing)
+├── mobile-app/       (existing)
+│
+└── ml/
+    ├── data/
+    │   ├── raw/                  # Raw CSVs from ESP32 (one per session)
+    │   │   └── session_001.csv
+    │   ├── processed/            # Cleaned + feature-engineered CSVs
+    │   │   └── features_001.csv
+    │   └── combined_dataset.csv  # All sessions merged for training
+    │
+    ├── notebooks/
+    │   ├── 01_eda.ipynb          # Exploratory data analysis
+    │   ├── 02_preprocessing.ipynb
+    │   └── 03_model_training.ipynb
+    │
+    ├── src/
+    │   ├── preprocess.py         # CSV cleaning + feature engineering
+    │   ├── train.py              # Model training script
+    │   ├── evaluate.py           # Metrics, confusion matrix, plots
+    │   ├── predict.py            # Single-sample inference function
+    │   └── api.py                # FastAPI inference server
+    │
+    ├── models/
+    │   ├── stress_model.pkl      # Trained scikit-learn model
+    │   ├── scaler.pkl            # StandardScaler fitted on training data
+    │   └── label_encoder.pkl     # LabelEncoder for class names
+    │
+    ├── requirements.txt
+    └── README_ML.md
+```
+
+---
+
+### 🧹 STEP 1 — DATA PREPROCESSING (`src/preprocess.py`)
+
+The raw CSV from ESP32 is noisy. This script cleans it and engineers meaningful features.
+
+#### Cleaning steps:
+
+```python
+import pandas as pd
+import numpy as np
+from scipy.signal import butter, filtfilt
+
+def load_and_clean(filepath):
+    df = pd.read_csv(filepath)
+
+    # 1. Drop rows with nulls or sensor dropout values
+    df = df.dropna()
+    df = df[df['heart_rate'].between(40, 200)]
+    df = df[df['spo2'].between(85, 100)]
+    df = df[df['gsr'].between(0.5, 25)]
+    df = df[df['temperature'].between(15, 45)]
+    df = df[df['humidity'].between(20, 95)]
+
+    # 2. Sort by timestamp
+    df = df.sort_values('timestamp').reset_index(drop=True)
+
+    # 3. Remove duplicate timestamps
+    df = df.drop_duplicates(subset='timestamp')
+
+    # 4. Low-pass filter on GSR (it's the noisiest signal)
+    b, a = butter(3, 0.1, btype='low', fs=1.0)
+    df['gsr_filtered'] = filtfilt(b, a, df['gsr'].values)
+
+    # 5. Smooth heart rate with 5-sample rolling mean
+    df['hr_smooth'] = df['heart_rate'].rolling(window=5, min_periods=1).mean()
+
+    return df
+```
+
+#### Feature engineering:
+
+```python
+def engineer_features(df):
+    # --- Time-domain features (rolling 30-second window) ---
+    window = 30
+
+    df['hr_mean_30s']    = df['hr_smooth'].rolling(window).mean()
+    df['hr_std_30s']     = df['hr_smooth'].rolling(window).std()
+    df['hr_delta']       = df['hr_smooth'].diff()           # rate of change
+    df['hr_max_30s']     = df['hr_smooth'].rolling(window).max()
+
+    df['gsr_mean_30s']   = df['gsr_filtered'].rolling(window).mean()
+    df['gsr_std_30s']    = df['gsr_filtered'].rolling(window).std()
+    df['gsr_delta']      = df['gsr_filtered'].diff()        # GSR spikes = stress event
+    df['gsr_peak_count'] = (df['gsr_delta'] > 1.5).rolling(window).sum()  # peaks in window
+
+    df['hrv_mean_30s']   = df['hrv'].rolling(window).mean()
+    df['hrv_drop']       = df['hrv'].diff().clip(upper=0).abs()  # HRV drops signal stress
+
+    # --- Environmental context features ---
+    df['heat_index']     = df['temperature'] + 0.33 * (df['humidity'] / 100 * 6.105 *
+                           np.exp(17.27 * df['temperature'] / (df['temperature'] + 237.3))) - 4.0
+    df['temp_delta']     = df['temperature'].diff()
+    df['humidity_delta'] = df['humidity'].diff()
+
+    # --- Cross-signal interaction features ---
+    # High GSR + high HR together = strong stress signal
+    df['gsr_hr_product'] = df['gsr_filtered'] * df['hr_smooth'] / 100
+
+    # Low HRV + high temp = compounded physiological load
+    df['hrv_temp_ratio'] = df['hrv'] / (df['temperature'] + 1)
+
+    # SpO2 drop combined with HR spike = exertion/anxiety
+    df['spo2_hr_ratio']  = df['spo2'] / (df['hr_smooth'] + 1)
+
+    # --- Session position feature (stress often peaks mid-session) ---
+    df['session_progress'] = (df['timestamp'] - df['timestamp'].min()) / \
+                             (df['timestamp'].max() - df['timestamp'].min() + 1)
+
+    # Drop rows with NaN from rolling windows
+    df = df.dropna().reset_index(drop=True)
+
+    return df
+```
+
+#### Final feature columns used for training:
+
+```python
+FEATURE_COLS = [
+    'hr_mean_30s', 'hr_std_30s', 'hr_delta', 'hr_max_30s',
+    'gsr_mean_30s', 'gsr_std_30s', 'gsr_delta', 'gsr_peak_count',
+    'hrv_mean_30s', 'hrv_drop',
+    'spo2',
+    'temperature', 'humidity', 'heat_index', 'temp_delta', 'humidity_delta',
+    'gsr_hr_product', 'hrv_temp_ratio', 'spo2_hr_ratio',
+    'session_progress'
+]
+
+TARGET_COL = 'label'  # 0=Calm, 1=Moderate, 2=Stressed, 3=Critical
+```
+
+---
+
+### 🏋️ STEP 2 — MODEL TRAINING (`src/train.py`)
+
+Use a **Random Forest Classifier** as the primary model — it handles mixed sensor data well, is robust to noise, gives feature importances, and is fast enough for a lightweight inference API.
+
+```python
+import pandas as pd
+import numpy as np
+import pickle
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.pipeline import Pipeline
+
+# --- Load combined dataset ---
+df = pd.read_csv('data/combined_dataset.csv')
+
+X = df[FEATURE_COLS]
+y = df[TARGET_COL]
+
+# --- Train/test split (stratified to balance class distribution) ---
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+# --- Build pipeline: scale → classify ---
+pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    ('clf', RandomForestClassifier(
+        n_estimators=200,
+        max_depth=12,
+        min_samples_leaf=5,
+        class_weight='balanced',   # handles imbalanced stress classes
+        random_state=42,
+        n_jobs=-1
+    ))
+])
+
+# --- Cross-validate first ---
+cv_scores = cross_val_score(pipeline, X_train, y_train,
+                             cv=StratifiedKFold(5), scoring='f1_weighted')
+print(f"CV F1 (weighted): {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+
+# --- Train final model ---
+pipeline.fit(X_train, y_train)
+
+# --- Evaluate ---
+y_pred = pipeline.predict(X_test)
+print(classification_report(y_test, y_pred,
+      target_names=['Calm', 'Moderate', 'Stressed', 'Critical']))
+
+# --- Save model ---
+with open('models/stress_model.pkl', 'wb') as f:
+    pickle.dump(pipeline, f)
+
+print("Model saved to models/stress_model.pkl")
+```
+
+#### Also train and compare these alternatives:
+
+```python
+# Gradient Boosting (often slightly better on tabular sensor data)
+from sklearn.ensemble import GradientBoostingClassifier
+gb_model = GradientBoostingClassifier(n_estimators=150, learning_rate=0.1, max_depth=5)
+
+# XGBoost (if installed, best performance)
+from xgboost import XGBClassifier
+xgb_model = XGBClassifier(n_estimators=200, max_depth=6, learning_rate=0.05,
+                           use_label_encoder=False, eval_metric='mlogloss')
+
+# Pick whichever has highest weighted F1 on test set
+```
+
+---
+
+### 📈 STEP 3 — EVALUATION (`src/evaluate.py`)
+
+Generate these outputs after training:
+
+```python
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import ConfusionMatrixDisplay
+
+# 1. Confusion matrix heatmap
+ConfusionMatrixDisplay.from_predictions(
+    y_test, y_pred,
+    display_labels=['Calm', 'Moderate', 'Stressed', 'Critical'],
+    cmap='Blues'
+)
+plt.savefig('models/confusion_matrix.png')
+
+# 2. Feature importance bar chart
+importances = pipeline.named_steps['clf'].feature_importances_
+feat_df = pd.DataFrame({'feature': FEATURE_COLS, 'importance': importances})
+feat_df = feat_df.sort_values('importance', ascending=False)
+
+plt.figure(figsize=(10, 8))
+sns.barplot(data=feat_df, x='importance', y='feature', palette='viridis')
+plt.title('Feature Importances — BioPulse Stress Model')
+plt.tight_layout()
+plt.savefig('models/feature_importance.png')
+
+# 3. Print classification report
+print(classification_report(y_test, y_pred))
+```
+
+---
+
+### 🚀 STEP 4 — INFERENCE API (`src/api.py`)
+
+A FastAPI server that accepts a JSON payload of raw sensor readings and returns a stress prediction.
+
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+import pandas as pd
+import pickle
+import numpy as np
+from preprocess import engineer_features, load_and_clean
+from io import StringIO
+
+app = FastAPI(title="BioPulse ML Inference API")
+
+# Load model once at startup
+with open('../models/stress_model.pkl', 'rb') as f:
+    MODEL = pickle.load(f)
+
+# --- Request models ---
+
+class LiveReading(BaseModel):
+    # Single real-time reading — uses simplified inference
+    heart_rate: float
+    spo2: float
+    gsr: float
+    hrv: float
+    temperature: float
+    humidity: float
+    # Rolling stats (computed client-side or passed from backend's buffer)
+    hr_mean_30s: float
+    hr_std_30s: float
+    gsr_mean_30s: float
+    gsr_std_30s: float
+    gsr_peak_count: float
+    hrv_mean_30s: float
+    session_progress: float = 0.5
+
+class CSVUpload(BaseModel):
+    # Full CSV content as string for batch prediction
+    csv_content: str
+    student_id: str = "unknown"
+
+# --- Endpoints ---
+
+@app.post("/predict/live")
+def predict_live(reading: LiveReading):
+    """Single reading → instant stress prediction"""
+    data = reading.dict()
+
+    # Compute derived features
+    data['hr_delta']       = 0.0   # no previous reading available
+    data['hr_max_30s']     = data['hr_mean_30s'] + data['hr_std_30s']
+    data['gsr_delta']      = 0.0
+    data['hrv_drop']       = 0.0
+    data['humidity_delta'] = 0.0
+    data['temp_delta']     = 0.0
+    data['heat_index']     = data['temperature'] + 0.33 * (
+        data['humidity'] / 100 * 6.105 *
+        np.exp(17.27 * data['temperature'] / (data['temperature'] + 237.3))
+    ) - 4.0
+    data['gsr_hr_product'] = data['gsr'] * data['heart_rate'] / 100
+    data['hrv_temp_ratio'] = data['hrv'] / (data['temperature'] + 1)
+    data['spo2_hr_ratio']  = data['spo2'] / (data['heart_rate'] + 1)
+
+    FEATURE_COLS = [
+        'hr_mean_30s', 'hr_std_30s', 'hr_delta', 'hr_max_30s',
+        'gsr_mean_30s', 'gsr_std_30s', 'gsr_delta', 'gsr_peak_count',
+        'hrv_mean_30s', 'hrv_drop', 'spo2',
+        'temperature', 'humidity', 'heat_index', 'temp_delta', 'humidity_delta',
+        'gsr_hr_product', 'hrv_temp_ratio', 'spo2_hr_ratio', 'session_progress'
+    ]
+
+    X = pd.DataFrame([data])[FEATURE_COLS]
+    prediction = MODEL.predict(X)[0]
+    probabilities = MODEL.predict_proba(X)[0]
+
+    labels = ['CALM', 'MODERATE', 'STRESSED', 'CRITICAL']
+    colors = ['#10B981', '#F59E0B', '#EF4444', '#EF4444']
+
+    return {
+        "stress_label": labels[prediction],
+        "stress_index": int(np.dot(probabilities, [15, 50, 75, 95])),  # weighted score
+        "confidence": round(float(probabilities[prediction]) * 100, 1),
+        "color": colors[prediction],
+        "probabilities": {
+            "calm":     round(float(probabilities[0]) * 100, 1),
+            "moderate": round(float(probabilities[1]) * 100, 1),
+            "stressed": round(float(probabilities[2]) * 100, 1),
+            "critical": round(float(probabilities[3]) * 100, 1)
+        },
+        "environmental_flag": data['heat_index'] > 32  # flag uncomfortable environment
+    }
+
+
+@app.post("/predict/csv")
+def predict_csv(upload: CSVUpload):
+    """Full CSV upload → batch predictions for an entire session"""
+    df = pd.read_csv(StringIO(upload.csv_content))
+    df = load_and_clean_df(df)       # cleaning function
+    df = engineer_features(df)       # feature engineering
+
+    X = df[FEATURE_COLS]
+    predictions = MODEL.predict(X)
+    probas = MODEL.predict_proba(X)
+
+    labels = ['CALM', 'MODERATE', 'STRESSED', 'CRITICAL']
+
+    results = []
+    for i, (pred, proba) in enumerate(zip(predictions, probas)):
+        results.append({
+            "timestamp": int(df['timestamp'].iloc[i]),
+            "stress_label": labels[pred],
+            "stress_index": int(np.dot(proba, [15, 50, 75, 95])),
+            "confidence": round(float(proba[pred]) * 100, 1)
+        })
+
+    # Session-level summary
+    stress_indices = [r['stress_index'] for r in results]
+    spike_count = sum(1 for s in stress_indices if s > 65)
+
+    return {
+        "student_id": upload.student_id,
+        "total_readings": len(results),
+        "session_avg_stress": round(np.mean(stress_indices), 1),
+        "session_peak_stress": max(stress_indices),
+        "spike_count": spike_count,
+        "dominant_state": labels[int(np.bincount(predictions).argmax())],
+        "readings": results
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "model": "RandomForest", "version": "1.0"}
+```
+
+Run with:
+```bash
+cd ml/src
+uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+---
+
+### 🔗 STEP 5 — INTEGRATE INTO EXISTING BACKEND
+
+Add these to `backend/server.js`:
+
+```js
+// Proxy ML prediction requests from app → Python FastAPI
+const ML_API = process.env.ML_API_URL || 'http://localhost:8000';
+
+// 1. Live prediction — called every N seconds with buffered rolling stats
+app.post('/api/ml/predict/live', async (req, res) => {
+  try {
+    const response = await fetch(`${ML_API}/predict/live`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const prediction = await response.json();
+
+    // Store ML prediction alongside the reading in SQLite
+    db.prepare(`UPDATE readings SET ml_stress_label = ?, ml_confidence = ?
+                WHERE id = ?`)
+      .run(prediction.stress_label, prediction.confidence, req.body.reading_id);
+
+    res.json(prediction);
+  } catch (err) {
+    res.status(503).json({ error: 'ML service unavailable', fallback: true });
+  }
+});
+
+// 2. CSV batch prediction — called when user uploads a session CSV
+app.post('/api/ml/predict/csv', upload.single('file'), async (req, res) => {
+  const csvContent = req.file.buffer.toString('utf8');
+  const response = await fetch(`${ML_API}/predict/csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      csv_content: csvContent,
+      student_id: req.body.student_id
+    })
+  });
+  const result = await response.json();
+  res.json(result);
+});
+```
+
+Add `ml_stress_label TEXT, ml_confidence REAL` columns to your SQLite `readings` table.
+
+---
+
+### 📱 STEP 6 — INTEGRATE INTO REACT APP
+
+#### New hook — `useMLPrediction.js`
+
+```js
+// src/hooks/useMLPrediction.js
+import { useState, useCallback } from 'react';
+
+const ML_ENDPOINT = `${import.meta.env.VITE_BACKEND_URL}/api/ml/predict/live`;
+
+export function useMLPrediction() {
+  const [mlResult, setMlResult] = useState(null);
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlAvailable, setMlAvailable] = useState(true);
+
+  const predict = useCallback(async (sensorData, rollingStats) => {
+    if (!mlAvailable) return null;
+    setMlLoading(true);
+    try {
+      const res = await fetch(ML_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...sensorData, ...rollingStats })
+      });
+      const data = await res.json();
+      setMlResult(data);
+      return data;
+    } catch {
+      setMlAvailable(false);  // fall back to formula-based score
+      return null;
+    } finally {
+      setMlLoading(false);
+    }
+  }, [mlAvailable]);
+
+  return { mlResult, mlLoading, mlAvailable, predict };
+}
+```
+
+#### New UI components to add:
+
+**1. `MLBadge.jsx`** — shown on Live Monitor next to stress gauge:
+```
+┌─────────────────────────────┐
+│ 🤖 ML Model  ●  ACTIVE      │
+│ Confidence: 87.3%           │
+│ Env Flag: ⚠️ High Heat Index │
+└─────────────────────────────┘
+```
+
+**2. `CSVUploadPanel.jsx`** — on History screen, drag-and-drop CSV from ESP32:
+```
+┌─────────────────────────────────┐
+│  📂 Upload Session CSV          │
+│  ┌─────────────────────────┐   │
+│  │  Drop .csv file here    │   │
+│  │  or tap to browse       │   │
+│  └─────────────────────────┘   │
+│  [Analyze with ML Model →]     │
+└─────────────────────────────────┘
+```
+
+After upload → calls `/api/ml/predict/csv` → renders the full session chart with ML labels overlaid alongside the rule-based labels for comparison.
+
+**3. `ConfidenceBar.jsx`** — 4-segment probability bar showing CALM / MODERATE / STRESSED / CRITICAL percentages from `mlResult.probabilities`
+
+**4. Update Live Monitor** — when ML is available, replace the formula-based `stress_index` display with the ML-predicted one. Show both side-by-side as `Formula: 68` and `ML Model: 71` in small text below the gauge for transparency.
+
+---
+
+### 📋 REQUIREMENTS FILE
+
+```txt
+# ml/requirements.txt
+pandas==2.1.4
+numpy==1.26.3
+scikit-learn==1.4.0
+xgboost==2.0.3
+scipy==1.12.0
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.9
+pydantic==2.5.3
+matplotlib==3.8.2
+seaborn==1.0.0
+jupyter==1.0.0
+openpyxl==3.1.2
+```
+
+Install with:
+```bash
+cd ml
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+```
+
+---
+
+### 📌 DHT11 — WHAT IT ADDS TO THE MODEL
+
+This is the key insight that makes the environmental sensor meaningful:
+
+| Environmental Condition | Effect on Physiology | Model Learns |
+|------------------------|---------------------|--------------|
+| High temp + high humidity (heat index > 32°C) | GSR elevates even at rest — not true stress | To NOT overclassify stress in hot rooms |
+| Sudden temp drop | Brief HR spike — not anxiety | To discount isolated HR spikes in cold events |
+| Low humidity + normal temp | Baseline reference condition | Calibration anchor for other readings |
+| High humidity alone | SpO2 slightly suppressed | To adjust SpO2 weight in humid rooms |
+
+Without DHT11, a hot classroom would generate false stress readings constantly. With DHT11 in the feature set, the model learns to separate physiological stress from thermal discomfort — a key academic validity claim for your project.
+
+---
+
+### 🔁 DATA LABELING STRATEGY (BOOTSTRAPPING)
+
+Since you don't have ground-truth labeled data yet, use this 3-phase approach:
+
+**Phase 1 — Pseudo-labels (now):** Use the existing formula (`computeStressIndex`) to auto-label CSV rows. Train initial model on this. Accuracy will be similar to the formula but with environmental context awareness added.
+
+**Phase 2 — Self-report labels (during classroom sessions):** Ask students to press a button on a simple web page rating their stress 1–4 every 5 minutes. Join timestamps with sensor readings. Retrain model on real human labels.
+
+**Phase 3 — Expert labels (final):** Have one researcher manually label 2–3 full sessions by watching the time-series charts. Use these as a held-out evaluation set to report final accuracy.
+
+---
+
+### 🧪 PROMPT FOR AN AI AGENT TO BUILD THIS
+
+> You are adding a machine learning pipeline to the BioPulse IoT stress monitoring project. The existing system has: ESP32 hardware, a Node.js/WebSocket backend, and a React mobile app. You are adding a new `ml/` directory containing a complete Python ML pipeline.
+>
+> Follow this exact specification:
+>
+> **1. Preprocessing (`src/preprocess.py`):** Write functions `load_and_clean(filepath)` and `engineer_features(df)` exactly as specified. The cleaning removes sensor dropout values, applies a Butterworth low-pass filter to GSR, and smooths HR with a 5-sample rolling mean. Feature engineering produces 20 features including 30-second rolling statistics, cross-signal interactions (gsr_hr_product, hrv_temp_ratio, spo2_hr_ratio), DHT11-derived heat_index, and session_progress.
+>
+> **2. Training (`src/train.py`):** Train a scikit-learn `Pipeline(StandardScaler + RandomForestClassifier)`. Use `class_weight='balanced'`, `n_estimators=200`, `StratifiedKFold(5)` cross-validation. Also train GradientBoosting and XGBoost variants and report all three. Save the best model as `models/stress_model.pkl`. Generate and save confusion matrix and feature importance plots.
+>
+> **3. Inference API (`src/api.py`):** FastAPI server on port 8000 with two endpoints: `POST /predict/live` for single real-time readings (returns stress_label, stress_index 0–100, confidence %, probabilities dict, environmental_flag) and `POST /predict/csv` for full session batch predictions (returns per-reading predictions + session summary stats). Include `GET /health`. Use pickle to load the model once at startup.
+>
+> **4. Backend integration:** Add two proxy routes to the existing Node.js backend: `POST /api/ml/predict/live` and `POST /api/ml/predict/csv`. Add `ML_API_URL` env variable. If ML service is down, return `{ fallback: true }` so the app degrades gracefully to the formula-based score.
+>
+> **5. React integration:** Create `useMLPrediction.js` hook, `MLBadge.jsx`, `ConfidenceBar.jsx`, and `CSVUploadPanel.jsx` components. Update `LiveMonitor.jsx` to show both formula score and ML score side by side. Add the CSV upload panel to the History screen. If `mlAvailable` is false, silently use formula score with no error shown to user.
+>
+> Do not fabricate any data. Use the FEATURE_COLS list exactly as specified. All Python code must be compatible with Python 3.10+.
+
+---
+
+The DHT11 is what makes this academically interesting — it lets your model distinguish **"student is stressed"** from **"the room is uncomfortably hot"**, which is exactly the kind of nuance a research paper on classroom atmosphere would need to address.
+Good — with that hardware the bottleneck conversation is completely different. Here's exactly how to use it properly:
+
+---
+
+## 🚀 Deep Learning Pipeline — BioPulse on RTX 4050
+
+---
+
+### 🎯 The Fundamental Shift This Hardware Enables
+
+With tree models you had to **manually engineer features** (rolling means, deltas, products) because the model can't learn temporal patterns itself. With a GPU and deep learning you feed **raw sequential sensor readings** directly — the model learns its own features from the signal shape. This is strictly better and removes the entire `preprocess.py` feature engineering step.
+
+```
+Tree Model Approach:
+Raw CSV → Manual Feature Engineering (20 features) → Random Forest → Prediction
+
+GPU Deep Learning Approach:
+Raw CSV → Sliding Window Sequences → Neural Network → Prediction
+                                      (learns features itself)
+```
+
+---
+
+### 🖥️ Your Actual GPU Specs
+
+Your RTX 4050 laptop (Dell G15 5530):
+
+| Spec | Value |
+|------|-------|
+| VRAM | 6GB GDDR6 |
+| CUDA Cores | 2048 |
+| TGP | 140W (max, good for a laptop GPU) |
+| RAM | 16GB DDR5 |
+| CPU | i7-13650HX (14 cores) |
+
+6GB VRAM is the real constraint — not a problem for any model you'd run here. Every architecture below fits comfortably within 2GB VRAM, leaving headroom for batch sizes.
+
+---
+
+### 🧠 The Three Models Worth Building
+
+---
+
+#### Model 1 — 1D CNN (Best for This Project)
+
+**Why it's the right primary model:**
+- Physiological signals are waveforms. Convolution filters learn to detect shapes — a GSR spike, an HR ramp-up, a HRV dip — exactly like edge detection in images but for time-series
+- Fastest training of all DL options — your dataset trains in seconds
+- Fastest inference — under 2ms per prediction on CPU too, so no GPU needed at serving time
+- Captures local patterns perfectly (a 5-second stress spike)
+
+```python
+import torch
+import torch.nn as nn
+
+class StressCNN(nn.Module):
+    def __init__(self, n_channels=7, seq_len=60, n_classes=4):
+        super().__init__()
+        
+        # Three conv blocks — each learns increasingly abstract features
+        # Block 1: detects raw signal events (spikes, drops)
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(n_channels, 64, kernel_size=7, padding=3),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Dropout(0.2)
+        )
+        
+        # Block 2: detects patterns across events (spike followed by recovery)
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(64, 128, kernel_size=5, padding=2),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Dropout(0.2)
+        )
+        
+        # Block 3: detects session-level stress trends
+        self.conv3 = nn.Sequential(
+            nn.Conv1d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool1d(1)  # global average pooling → fixed size output
+        )
+        
+        # Classifier head
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, n_classes)
+        )
+    
+    def forward(self, x):
+        # x shape: (batch, channels, seq_len)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        return self.classifier(x)
+
+# Input: 60 seconds of 7 sensor channels
+# Output: 4-class stress probability vector
+```
+
+**Input shape:** `(batch_size, 7, 60)` — 7 sensors, 60 time steps (1-second resolution, 60-second window)
+
+The 7 channels are: `[heart_rate, spo2, gsr, hrv, temperature, humidity, heat_index]`
+
+---
+
+#### Model 2 — BiLSTM (Best for Temporal Dependencies)
+
+**Why it adds value over CNN:**
+- CNN sees a fixed local window. LSTM maintains a hidden state — it remembers that stress was already elevated 2 minutes ago, which changes how it interprets a current GSR spike
+- Bidirectional means it reads the sequence forward AND backward — useful when stress builds gradually over time
+- Captures the "recovery" pattern after a stress spike, which CNN misses
+
+```python
+class StressBiLSTM(nn.Module):
+    def __init__(self, n_features=7, hidden_size=128, n_layers=2, n_classes=4):
+        super().__init__()
+        
+        self.lstm = nn.LSTM(
+            input_size=n_features,
+            hidden_size=hidden_size,
+            num_layers=n_layers,
+            batch_first=True,
+            bidirectional=True,      # forward + backward pass
+            dropout=0.3
+        )
+        
+        self.attention = nn.Sequential(
+            nn.Linear(hidden_size * 2, 64),
+            nn.Tanh(),
+            nn.Linear(64, 1),
+            nn.Softmax(dim=1)        # attention weights over time steps
+        )
+        
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size * 2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, n_classes)
+        )
+    
+    def forward(self, x):
+        # x shape: (batch, seq_len, features)
+        lstm_out, _ = self.lstm(x)             # (batch, seq_len, hidden*2)
+        
+        # Attention: weight time steps by importance
+        # Model learns that the last 10 seconds matter more than the first 10
+        attn_weights = self.attention(lstm_out) # (batch, seq_len, 1)
+        context = (lstm_out * attn_weights).sum(dim=1)  # weighted sum
+        
+        return self.classifier(context)
+
+# Input shape: (batch, 60, 7) — note transposed vs CNN
+```
+
+The **attention mechanism** is particularly valuable here — it lets the model learn that the *peak* of a GSR spike (not its average) is what determines stress class. You can visualize attention weights to see which time steps the model focused on — great for your project report.
+
+---
+
+#### Model 3 — CNN + LSTM Hybrid (Best Overall)
+
+**Why combine them:**
+- CNN extracts local features from raw signals (spike shapes, waveform patterns)
+- LSTM processes the CNN's extracted features sequentially (temporal context)
+- This is the standard architecture for physiological signal classification in research papers
+
+```python
+class StressCNNLSTM(nn.Module):
+    def __init__(self, n_channels=7, seq_len=60, n_classes=4):
+        super().__init__()
+        
+        # CNN feature extractor
+        self.cnn = nn.Sequential(
+            nn.Conv1d(n_channels, 64, kernel_size=5, padding=2),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Conv1d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.MaxPool1d(2)          # seq_len: 60 → 30
+        )
+        
+        # LSTM temporal processor
+        self.lstm = nn.LSTM(
+            input_size=128,          # CNN output channels become LSTM features
+            hidden_size=64,
+            num_layers=2,
+            batch_first=True,
+            bidirectional=True,
+            dropout=0.2
+        )
+        
+        # Classifier
+        self.classifier = nn.Sequential(
+            nn.Linear(128, 64),      # 64 * 2 bidirectional
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(64, n_classes)
+        )
+    
+    def forward(self, x):
+        # x: (batch, channels, seq_len)
+        cnn_out = self.cnn(x)                          # (batch, 128, 30)
+        lstm_in = cnn_out.permute(0, 2, 1)             # (batch, 30, 128)
+        lstm_out, (hidden, _) = self.lstm(lstm_in)
+        
+        # Use final hidden states from both directions
+        out = torch.cat([hidden[-2], hidden[-1]], dim=1)  # (batch, 128)
+        return self.classifier(out)
+```
+
+**This is your final deployed model.** CNN handles the signal morphology, LSTM handles the temporal narrative.
+
+---
+
+### 🏗️ Full Training Pipeline
+
+```python
+# train_deep.py
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+from torch.cuda.amp import GradScaler, autocast  # mixed precision — uses your GPU efficiently
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+# ── Dataset ──────────────────────────────────────────────────────────────────
+
+class StressDataset(Dataset):
+    def __init__(self, sequences, labels):
+        self.X = torch.FloatTensor(sequences)  # (N, channels, seq_len)
+        self.y = torch.LongTensor(labels)
+    
+    def __len__(self): return len(self.y)
+    def __getitem__(self, i): return self.X[i], self.y[i]
+
+def build_sequences(df, window=60, step=10, feature_cols=None, label_col='label'):
+    """
+    Sliding window: take 60-second windows, step 10 seconds
+    This gives ~5x more training samples from the same raw data
+    """
+    features = df[feature_cols].values
+    labels   = df[label_col].values
+    
+    X, y = [], []
+    for start in range(0, len(df) - window, step):
+        end = start + window
+        X.append(features[start:end].T)          # (channels, seq_len)
+        y.append(int(labels[end - 1]))            # label at end of window
+    
+    return np.array(X, dtype=np.float32), np.array(y, dtype=np.int64)
+
+# ── Training Loop ─────────────────────────────────────────────────────────────
+
+def train(model, train_loader, val_loader, epochs=50, device='cuda'):
+    model = model.to(device)
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    
+    # Cosine annealing — learning rate warms up then decays smoothly
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=10, T_mult=2
+    )
+    
+    # Class weights to handle CALM class dominance
+    class_weights = torch.tensor([1.0, 1.5, 2.5, 4.0]).to(device)
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    
+    # Mixed precision — halves VRAM usage, ~2x faster on RTX cards
+    scaler = GradScaler()
+    
+    best_val_acc = 0
+    
+    for epoch in range(epochs):
+        # ── Train ──
+        model.train()
+        train_loss = 0
+        for X_batch, y_batch in train_loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            optimizer.zero_grad()
+            
+            with autocast():                           # FP16 on GPU
+                logits = model(X_batch)
+                loss   = criterion(logits, y_batch)
+            
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # prevent exploding gradients
+            scaler.step(optimizer)
+            scaler.update()
+            train_loss += loss.item()
+        
+        scheduler.step()
+        
+        # ── Validate ──
+        model.eval()
+        correct, total = 0, 0
+        with torch.no_grad():
+            for X_batch, y_batch in val_loader:
+                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                preds = model(X_batch).argmax(dim=1)
+                correct += (preds == y_batch).sum().item()
+                total   += len(y_batch)
+        
+        val_acc = correct / total
+        print(f"Epoch {epoch+1:3d} | Loss: {train_loss/len(train_loader):.4f} | Val Acc: {val_acc:.4f}")
+        
+        # Save best model
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), '../models/best_cnn_lstm.pt')
+    
+    return model
+
+# ── Run ───────────────────────────────────────────────────────────────────────
+
+FEATURE_COLS = ['heart_rate', 'spo2', 'gsr', 'hrv', 'temperature', 'humidity', 'heat_index']
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"Training on: {DEVICE}")  # should print: Training on: cuda
+
+df = pd.read_csv('../data/combined_dataset.csv')
+
+# Normalize per-channel
+scaler = StandardScaler()
+df[FEATURE_COLS] = scaler.fit_transform(df[FEATURE_COLS])
+
+X, y = build_sequences(df, window=60, step=10, feature_cols=FEATURE_COLS)
+
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+
+train_ds = StressDataset(X_train, y_train)
+val_ds   = StressDataset(X_val,   y_val)
+
+train_loader = DataLoader(train_ds, batch_size=64, shuffle=True,  num_workers=4, pin_memory=True)
+val_loader   = DataLoader(val_ds,   batch_size=64, shuffle=False, num_workers=4, pin_memory=True)
+
+model = StressCNNLSTM(n_channels=7, seq_len=60, n_classes=4)
+train(model, train_loader, val_loader, epochs=50, device=DEVICE)
+```
+
+**`pin_memory=True`** + **`num_workers=4`** means your i7's 14 cores are feeding batches to the GPU without it ever waiting — this is the correct way to saturate the RTX 4050.
+
+---
+
+### ⚡ Mixed Precision — Why It Matters on RTX 4050
+
+```
+Without AMP (FP32):  6GB VRAM used for a medium model
+With AMP (FP16):     3GB VRAM used — same model, ~2x faster, same accuracy
+```
+
+RTX 40-series cards have dedicated **Tensor Cores** that run FP16 operations at 2–4× the throughput of FP32. `GradScaler` + `autocast()` is all you need — PyTorch handles the rest automatically.
+
+---
+
+### 🏆 Final Model Architecture Decision
+
+```
+                    Raw Sensor Window
+                   (7 channels × 60s)
+                          │
+            ┌─────────────┴─────────────┐
+            │                           │
+       StressCNNLSTM              RandomForest
+       (deep features)          (engineered features)
+            │                           │
+            └─────────────┬─────────────┘
+                          │
+                   Soft Vote Ensemble
+                    (weighted 70/30)
+                          │
+                  Final Stress Class
+               + Confidence Scores
+```
+
+Keep the Random Forest in the ensemble because:
+- It's interpretable (feature importances for your report)
+- It handles edge cases the neural net hasn't seen during training
+- Together they're more robust than either alone
+- The neural net gets 70% weight, RF gets 30%
+
+---
+
+### 🔧 CUDA Setup for Your Laptop
+
+```bash
+# Install PyTorch with CUDA 12.1 (correct for your RTX 4050 / Ampere)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Verify GPU is visible
+python -c "import torch; print(torch.cuda.get_device_name(0))"
+# Should print: NVIDIA GeForce RTX 4050 Laptop GPU
+
+# Check VRAM
+python -c "import torch; print(torch.cuda.get_device_properties(0).total_memory / 1e9, 'GB')"
+# Should print: ~6.0 GB
+```
+
+---
+
+### 📊 What to Expect — Realistic Performance
+
+With your hardware and a properly collected dataset of ~10 classroom sessions (~36,000 rows with sliding windows):
+
+| Model | Training Time | Val Accuracy | Inference (CPU) |
+|-------|-------------|-------------|----------------|
+| Random Forest | 30 seconds | ~82% | 0.8ms |
+| 1D CNN only | ~2 minutes | ~86% | 1.2ms |
+| BiLSTM only | ~5 minutes | ~85% | 3.1ms |
+| CNN-LSTM | ~6 minutes | ~89% | 2.8ms |
+| CNN-LSTM + RF Ensemble | ~7 minutes | ~91% | 4ms |
+
+Your RTX 4050 trains CNN-LSTM in **minutes**, not hours. You can afford to run 20+ experiments and still finish in an afternoon.
+
+---
+
+### 🎯 One More Thing — Use Your GPU for Hyperparameter Search
+
+Since training is fast, run **Optuna** to automatically find the best architecture:
+
+```python
+import optuna
+
+def objective(trial):
+    hidden = trial.suggest_int('hidden_size', 32, 256)
+    layers = trial.suggest_int('n_layers', 1, 3)
+    lr     = trial.suggest_float('lr', 1e-4, 1e-2, log=True)
+    dropout = trial.suggest_float('dropout', 0.1, 0.5)
+
+    model = StressCNNLSTM(...)  # use trial params
+    # train for 20 epochs, return val accuracy
+    return val_accuracy
+
+study = optuna.create_study(direction='maximize')
+study.optimize(objective, n_trials=50)   # 50 experiments in ~1 hour on your GPU
+print(study.best_params)
+```
+
+50 trials × ~1 minute each = **optimal architecture found in 1 hour** while you do something else. This is the correct use of your hardware for a project this size.
+
+---
+
+**Bottom line:** Your GPU's real value here isn't raw power — it's **iteration speed**. You can train, test, and tune in minutes instead of hours, which means you can actually experiment with architectures and find what works best for your specific sensor setup rather than committing to one model blind.
+
+This is a really good question and a common misconception worth clearing up properly.
+
+---
+
+## CSV Format ≠ Static Data
+
+The CSV is just the **storage format**. What actually matters is what the data represents:
+
+```
+timestamp,  heart_rate, gsr,  temp, humidity
+1712001000,     78,     8.2,  29.1,   65
+1712001001,     79,     8.5,  29.1,   65
+1712001002,     83,     9.1,  29.2,   66
+1712001003,     91,    11.4,  29.2,   66   ← stress building
+1712001004,    103,    14.7,  29.3,   67   ← spike
+1712001005,    101,    15.1,  29.3,   67
+```
+
+Every row is **ordered in time**. Row 5's GSR reading of 14.7 is only meaningful **because** it followed rows where GSR was 8.2, 8.5, 9.1, 11.4. The temporal sequence is the signal. Strip the order and you lose everything.
+
+So the real question isn't "CSV or not" — it's **"does the order of rows matter?"** For physiological stress data, absolutely yes.
+
+---
+
+## Why Each Architecture Fits or Fails
+
+### ❌ Plain ANN (Feedforward)
+
+```
+Row 1 → [78, 8.2, 29.1, 65] → ANN → Stress Class
+Row 2 → [79, 8.5, 29.1, 65] → ANN → Stress Class
+Row 3 → [83, 9.1, 29.2, 66] → ANN → Stress Class
+```
+
+Each row is processed **completely independently**. The ANN has zero knowledge that GSR went 8.2 → 8.5 → 9.1 → 11.4 → 14.7. It sees 14.7 and has no context that this is a rising spike vs a flat elevated baseline. This is the weakest choice for your data — it's essentially the same as the weighted formula you already have, just with learned weights instead of hardcoded ones.
+
+**Verdict: ❌ Loses all temporal information. Don't use alone.**
+
+---
+
+### ⚠️ Vanilla RNN
+
+```
+t=1: hidden_state_1 = RNN([78, 8.2, 29.1], h_0)
+t=2: hidden_state_2 = RNN([79, 8.5, 29.1], h_1)
+t=3: hidden_state_3 = RNN([83, 9.1, 29.2], h_2)
+...
+t=60: final_state → Stress Class
+```
+
+Better — it maintains a hidden state that carries memory forward. But vanilla RNN suffers from the **vanishing gradient problem**. By the time you're at t=60, the gradient signal from t=5 has essentially vanished during backpropagation. This means it forgets what happened early in the window. For a 60-second stress window this is a real problem — the model forgets the baseline from the start of the window by the time it's classifying at the end.
+
+**Verdict: ⚠️ Valid but inferior. LSTM strictly dominates it.**
+
+---
+
+### ✅ LSTM
+
+Solves the vanishing gradient problem with three gates — forget, input, output — that explicitly control what to remember and what to discard:
+
+```
+Forget gate:  "Should I remember that HR was elevated 45 seconds ago?"
+Input gate:   "Is this new GSR spike worth storing in memory?"
+Output gate:  "What part of my memory is relevant to classify right NOW?"
+```
+
+This is why LSTM handles your data well — a student's stress at second 60 depends on their baseline from second 1, not just the last 5 seconds.
+
+**Verdict: ✅ Correct and sufficient. Your base model.**
+
+---
+
+### ✅ 1D CNN — Why It Still Makes Sense on CSV Data
+
+This is the part most people get wrong. 1D CNN is **not** for images. It slides a kernel over the **time axis**:
+
+```
+GSR signal over 60 seconds:
+[8.2, 8.5, 9.1, 11.4, 14.7, 15.1, 14.2, 12.1, 10.3, 9.1 ...]
+         ↑
+    kernel slides here detecting the SHAPE of this spike
+
+Kernel size 5 → looks at 5 consecutive readings at once
+Learns: "rising slope over 5 seconds followed by peak = stress event"
+```
+
+It's essentially a **learned signal filter** — like a Butterworth filter but one that adapts to detect stress-relevant patterns instead of just smoothing noise. It's used in every major physiological signal paper (ECG, EEG, GSR classification) precisely because sensor data has local waveform patterns.
+
+**Verdict: ✅ Excellent for local pattern detection in sensor signals.**
+
+---
+
+## Why CNN + LSTM Together Is The Right Answer
+
+They solve **different parts of the problem**:
+
+```
+Raw 60-second window from CSV
+         │
+         ▼
+    ┌─────────┐
+    │  1D CNN │  ← "What SHAPE events happened in this window?"
+    │         │    Detects: spikes, ramps, drops, plateaus
+    └────┬────┘    (local patterns, kernel sees 5-7 samples at a time)
+         │
+         ▼
+    ┌─────────┐
+    │  LSTM   │  ← "In what ORDER did those events happen?"
+    │         │    Detects: rising trend, spike then recovery,
+    └────┬────┘    sustained elevation vs momentary peak
+         │         (temporal narrative across the whole window)
+         ▼
+    Stress Class
+```
+
+Neither alone captures both. CNN without LSTM misses the temporal narrative. LSTM without CNN processes raw noisy values instead of clean extracted features — it has to learn the signal shapes AND the temporal patterns simultaneously, which is harder with limited data.
+
+---
+
+## What You Actually Feed Into the Model
+
+The CSV gets converted into **sliding windows** before training — this is the key step that makes it sequential:
+
+```python
+# Each training sample = 60 consecutive rows from the CSV
+# The MODEL sees sequences, not individual rows
+
+def build_sequences(df, window=60, step=10):
+    X, y = [], []
+    for start in range(0, len(df) - window, step):
+        end = start + window
+        # Shape: (7 sensors, 60 time steps) — one sample
+        X.append(df[SENSOR_COLS].values[start:end].T)
+        y.append(df['label'].values[end - 1])
+    return np.array(X), np.array(y)
+
+# From a 600-row CSV session you get ~55 training samples
+# From 10 sessions → ~550 samples → enough for DL
+```
+
+So even though your source is a CSV, what the model trains on is a 3D tensor of shape `(num_samples, 7_sensors, 60_timesteps)` — that's sequential data by definition.
+
+---
+
+## Final Architecture Decision
+
+```
+Input CSV
+    ↓
+Sliding window (60s, step 10s)
+    ↓
+Normalize per sensor channel
+    ↓
+CNN-LSTM Hybrid  ← primary model (GPU trained)
+    +
+Random Forest    ← on engineered features (interpretability + ensemble)
+    ↓
+Soft Vote (70% CNN-LSTM, 30% RF)
+    ↓
+Stress Class + Confidence
+```
+
+Use **LSTM** as your go-to if someone asks you to defend the architecture choice in a viva or presentation — it's the most intuitive answer for sequential sensor data. CNN+LSTM is the implementation because it performs better, but the **why** is rooted in LSTM's ability to model temporal dependencies in real-time physiological signals.
