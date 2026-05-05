@@ -1,0 +1,256 @@
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,300&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --ink:#0d1117; --paper:#f7f5f0; --accent:#c8382a; --accent2:#1a6b4a;
+    --wire:#2a4a7a; --amber:#c07a18; --rule:rgba(13,17,23,0.12);
+    --mono:'Space Mono',monospace; --sans:'DM Sans',sans-serif;
+  }
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans)}
+  .page{
+    width:680px; min-height:960px; padding:32px 36px 28px;
+    background:var(--paper); position:relative;
+    border:1px solid var(--rule);
+    margin: 0 auto; /* Added to center the page in standard viewers */
+  }
+  .corner{position:absolute;width:18px;height:18px;border-color:var(--ink);border-style:solid;opacity:.35}
+  .tl{top:10px;left:10px;border-width:2px 0 0 2px}
+  .tr{top:10px;right:10px;border-width:2px 2px 0 0}
+  .bl{bottom:10px;left:10px;border-width:0 0 2px 2px}
+  .br{bottom:10px;right:10px;border-width:0 2px 2px 0}
+
+  /* Header */
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:18px}
+  .hd-left h1{font-family:var(--mono);font-size:17px;font-weight:700;letter-spacing:-0.5px;line-height:1.2}
+  .hd-left p{font-size:11px;color:#555;margin-top:3px;font-family:var(--mono)}
+  .badge-row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border:1px solid;border-radius:2px;font-weight:700;letter-spacing:.5px}
+  .b-red{border-color:var(--accent);color:var(--accent)}
+  .b-green{border-color:var(--accent2);color:var(--accent2)}
+  .b-blue{border-color:var(--wire);color:var(--wire)}
+  .chip{background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:2px}
+
+  /* Section label */
+  .sl{font-family:var(--mono);font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .sl::after{content:'';flex:1;height:1px;background:var(--accent);opacity:.35}
+
+  /* Grid layout */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+  .section{margin-bottom:14px}
+
+  /* Objectives */
+  .obj-list{list-style:none;display:flex;flex-direction:column;gap:4px}
+  .obj-list li{font-size:11.5px;padding-left:14px;position:relative;line-height:1.5;color:#222}
+  .obj-list li::before{content:'›';position:absolute;left:0;color:var(--accent);font-weight:700}
+
+  /* Equipment cards */
+  .eq-card{border:1px solid var(--rule);padding:8px 10px;background:#fff;border-radius:2px}
+  .eq-card .name{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--ink)}
+  .eq-card .spec{font-size:9.5px;color:#666;margin-top:2px;line-height:1.45}
+
+  /* Architecture SVG block */
+  .arch-wrap{border:1px solid var(--rule);background:#fff;padding:10px;border-radius:2px;margin-bottom:14px}
+
+  /* Workflow */
+  .flow-wrap{border:1px solid var(--rule);background:#fff;padding:10px;border-radius:2px;margin-bottom:14px}
+
+  /* Footer */
+  .footer{border-top:1px solid var(--rule);padding-top:8px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+  .footer span{font-family:var(--mono);font-size:8px;color:#999}
+</style>
+
+<div class="page">
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+
+  <!-- HEADER -->
+  <div class="hd">
+    <div class="hd-left">
+      <h1>Psychophysiological Stress &amp; Deception Detection System</h1>
+      <p>Mini Project · IoT + Biometric Sensing · ESP32 Platform</p>
+      <div class="badge-row">
+        <span class="badge b-red">STRESS DETECTION</span>
+        <span class="badge b-blue">LIE DETECTION</span>
+        <span class="badge b-green">REAL-TIME MONITORING</span>
+      </div>
+    </div>
+    <div class="chip">ESP32</div>
+  </div>
+
+  <!-- ROW 1: Objectives + Equipment -->
+  <div class="grid2">
+    <div>
+      <div class="sl">01 — Objectives</div>
+      <ul class="obj-list">
+        <li>Continuously sense physiological stress markers using multi-modal biometric sensors</li>
+        <li>Correlate GSR, heart rate, and ambient conditions to compute a composite stress index</li>
+        <li>Enable real-time wireless data transmission via ESP32 Wi-Fi / Bluetooth</li>
+        <li>Provide visual dashboard with threshold-based alerts for stress &amp; anomaly detection</li>
+        <li>Extend use case to polygraph-style deception detection by analyzing autonomic response patterns</li>
+        <li>Log time-series sensor data for offline analysis and pattern recognition</li>
+      </ul>
+    </div>
+    <div>
+      <div class="sl">02 — Equipment List</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="eq-card">
+          <div class="name">ESP32 Dev Board</div>
+          <div class="spec">Dual-core 240MHz · Wi-Fi + BT · ADC / I2C / SPI · 3.3V logic</div>
+        </div>
+        <div class="eq-card">
+          <div class="name">GSR Sensor (Grove / AD8232)</div>
+          <div class="spec">Galvanic Skin Response · Measures skin conductance (µS) · Analog out → ADC pin</div>
+        </div>
+        <div class="eq-card">
+          <div class="name">Heart Rate Sensor (MAX30102)</div>
+          <div class="spec">Optical PPG · SpO₂ + BPM · I2C · 3.3V · Fingertip clip</div>
+        </div>
+        <div class="eq-card">
+          <div class="name">DHT22 Temp / Humidity</div>
+          <div class="spec">±0.5°C / ±2% RH · Single-wire digital · Ambient condition tracking</div>
+        </div>
+        <div class="eq-card">
+          <div class="name">Misc</div>
+          <div class="spec">Breadboard · jumper wires · USB power · optional OLED (SSD1306) · Resistors</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <div class="section">
+    <div class="sl">03 — System Architecture</div>
+    <div class="arch-wrap">
+      <svg width="100%" viewBox="0 0 608 130" role="img">
+        <title>System architecture diagram</title>
+        <desc>Sensors feed into ESP32, which processes data and transmits to cloud/dashboard</desc>
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- Sensor block -->
+        <rect x="2" y="10" width="118" height="110" rx="4" fill="#f0f4ff" stroke="#2a4a7a" stroke-width="0.8"/>
+        <text font-family="'Space Mono',monospace" font-size="8" font-weight="700" fill="#2a4a7a" x="61" y="23" text-anchor="middle" letter-spacing="1">SENSORS</text>
+        <rect x="10" y="30" width="102" height="22" rx="3" fill="#fff" stroke="#bbc8e0" stroke-width="0.6"/>
+        <text font-family="'DM Sans',sans-serif" font-size="9.5" fill="#0d1117" x="61" y="45" text-anchor="middle">GSR (Skin Conductance)</text>
+        <rect x="10" y="57" width="102" height="22" rx="3" fill="#fff" stroke="#bbc8e0" stroke-width="0.6"/>
+        <text font-family="'DM Sans',sans-serif" font-size="9.5" fill="#0d1117" x="61" y="72" text-anchor="middle">Heart Rate (MAX30102)</text>
+        <rect x="10" y="84" width="102" height="22" rx="3" fill="#fff" stroke="#bbc8e0" stroke-width="0.6"/>
+        <text font-family="'DM Sans',sans-serif" font-size="9.5" fill="#0d1117" x="61" y="99" text-anchor="middle">DHT22 (Temp / RH%)</text>
+        <!-- Arrow sensors → ESP32 -->
+        <line x1="120" y1="65" x2="152" y2="65" stroke="#2a4a7a" stroke-width="1.2" marker-end="url(#arr)"/>
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#888" x="136" y="61" text-anchor="middle">ADC/I2C</text>
+        <!-- ESP32 block -->
+        <rect x="154" y="22" width="120" height="86" rx="4" fill="#0d1117" stroke="#0d1117" stroke-width="0.8"/>
+        <text font-family="'Space Mono',monospace" font-size="9" font-weight="700" fill="#f7f5f0" x="214" y="42" text-anchor="middle">ESP32</text>
+        <text font-family="'DM Sans',sans-serif" font-size="8" fill="#aaa" x="214" y="56" text-anchor="middle">Signal Acquisition</text>
+        <text font-family="'DM Sans',sans-serif" font-size="8" fill="#aaa" x="214" y="68" text-anchor="middle">Filtering &amp; Fusion</text>
+        <text font-family="'DM Sans',sans-serif" font-size="8" fill="#aaa" x="214" y="80" text-anchor="middle">Stress Index Calc.</text>
+        <text font-family="'DM Sans',sans-serif" font-size="8" fill="#aaa" x="214" y="92" text-anchor="middle">Wi-Fi / BT Tx</text>
+        <!-- Arrow ESP32 → Processing -->
+        <line x1="274" y1="65" x2="306" y2="65" stroke="#1a6b4a" stroke-width="1.2" marker-end="url(#arr)"/>
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#888" x="290" y="61" text-anchor="middle">MQTT/HTTP</text>
+        <!-- Processing block -->
+        <rect x="308" y="22" width="110" height="86" rx="4" fill="#eef8f3" stroke="#1a6b4a" stroke-width="0.8"/>
+        <text font-family="'Space Mono',monospace" font-size="8" font-weight="700" fill="#1a6b4a" x="363" y="40" text-anchor="middle">PROCESSING</text>
+        <text font-family="'DM Sans',sans-serif" font-size="8.5" fill="#333" x="363" y="56" text-anchor="middle">Threshold Engine</text>
+        <text font-family="'DM Sans',sans-serif" font-size="8.5" fill="#333" x="363" y="69" text-anchor="middle">Anomaly Detection</text>
+        <text font-family="'DM Sans',sans-serif" font-size="8.5" fill="#333" x="363" y="82" text-anchor="middle">Time-series Logging</text>
+        <text font-family="'DM Sans',sans-serif" font-size="8.5" fill="#333" x="363" y="95" text-anchor="middle">Alert Generation</text>
+        <!-- Arrow Processing → Output -->
+        <line x1="418" y1="65" x2="450" y2="65" stroke="#c8382a" stroke-width="1.2" marker-end="url(#arr)"/>
+        <!-- Output block -->
+        <rect x="452" y="10" width="152" height="110" rx="4" fill="#fff8f7" stroke="#c8382a" stroke-width="0.8"/>
+        <text font-family="'Space Mono',monospace" font-size="8" font-weight="700" fill="#c8382a" x="528" y="26" text-anchor="middle">OUTPUT / DISPLAY</text>
+        <rect x="462" y="32" width="132" height="18" rx="2" fill="#fff" stroke="#f0ccc8" stroke-width="0.5"/>
+        <text font-family="'DM Sans',sans-serif" font-size="8.5" fill="#333" x="528" y="45" text-anchor="middle">Web Dashboard (Real-time)</text>
+        <rect x="462" y="55" width="132" height="18" rx="2" fill="#fff" stroke="#f0ccc8" stroke-width="0.5"/>
+        <text font-family="'DM Sans',sans-serif" font-size="8.5" fill="#333" x="528" y="68" text-anchor="middle">OLED Local Display</text>
+        <rect x="462" y="78" width="132" height="18" rx="2" fill="#fff" stroke="#f0ccc8" stroke-width="0.5"/>
+        <text font-family="'DM Sans',sans-serif" font-size="8.5" fill="#333" x="528" y="91" text-anchor="middle">Serial Monitor / CSV Log</text>
+        <rect x="462" y="101" width="132" height="14" rx="2" fill="#fff" stroke="#f0ccc8" stroke-width="0.5"/>
+        <text font-family="'DM Sans',sans-serif" font-size="8" fill="#c8382a" x="528" y="112" text-anchor="middle">STRESS / DECEPTION ALERT</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- WORKFLOW -->
+  <div class="section">
+    <div class="sl">04 — Workflow Chart</div>
+    <div class="flow-wrap">
+      <svg width="100%" viewBox="0 0 608 96" role="img">
+        <title>Workflow chart</title>
+        <desc>Step-by-step workflow from sensor sampling to alert generation</desc>
+        <defs>
+          <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- Steps: 7 boxes -->
+        <!-- Step sizes: ~78px wide, gap ~10 -->
+        <g>
+          <!-- 1 -->
+          <rect x="2" y="30" width="80" height="36" rx="3" fill="#f0f4ff" stroke="#2a4a7a" stroke-width="0.8"/>
+          <text font-family="'Space Mono',monospace" font-size="7" fill="#2a4a7a" x="42" y="43" text-anchor="middle" font-weight="700">SAMPLE</text>
+          <text font-family="'DM Sans',sans-serif" font-size="7.5" fill="#555" x="42" y="55" text-anchor="middle">GSR · BPM · Temp</text>
+          <line x1="82" y1="48" x2="95" y2="48" stroke="#888" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <!-- 2 -->
+          <rect x="97" y="30" width="80" height="36" rx="3" fill="#f0f4ff" stroke="#2a4a7a" stroke-width="0.8"/>
+          <text font-family="'Space Mono',monospace" font-size="7" fill="#2a4a7a" x="137" y="43" text-anchor="middle" font-weight="700">FILTER</text>
+          <text font-family="'DM Sans',sans-serif" font-size="7.5" fill="#555" x="137" y="55" text-anchor="middle">Noise removal</text>
+          <line x1="177" y1="48" x2="190" y2="48" stroke="#888" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <!-- 3 -->
+          <rect x="192" y="30" width="80" height="36" rx="3" fill="#eef8f3" stroke="#1a6b4a" stroke-width="0.8"/>
+          <text font-family="'Space Mono',monospace" font-size="7" fill="#1a6b4a" x="232" y="43" text-anchor="middle" font-weight="700">FUSE</text>
+          <text font-family="'DM Sans',sans-serif" font-size="7.5" fill="#555" x="232" y="55" text-anchor="middle">Multi-modal fusion</text>
+          <line x1="272" y1="48" x2="285" y2="48" stroke="#888" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <!-- 4 -->
+          <rect x="287" y="30" width="80" height="36" rx="3" fill="#eef8f3" stroke="#1a6b4a" stroke-width="0.8"/>
+          <text font-family="'Space Mono',monospace" font-size="7" fill="#1a6b4a" x="327" y="43" text-anchor="middle" font-weight="700">SCORE</text>
+          <text font-family="'DM Sans',sans-serif" font-size="7.5" fill="#555" x="327" y="55" text-anchor="middle">Stress Index (0–100)</text>
+          <line x1="367" y1="48" x2="380" y2="48" stroke="#888" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <!-- 5 — Decision -->
+          <rect x="382" y="26" width="80" height="44" rx="3" fill="#fef3dd" stroke="#c07a18" stroke-width="0.8"/>
+          <text font-family="'Space Mono',monospace" font-size="7" fill="#c07a18" x="422" y="40" text-anchor="middle" font-weight="700">COMPARE</text>
+          <text font-family="'DM Sans',sans-serif" font-size="7.5" fill="#555" x="422" y="52" text-anchor="middle">Threshold check</text>
+          <text font-family="'DM Sans',sans-serif" font-size="7" fill="#c07a18" x="422" y="64" text-anchor="middle">Baseline vs Peak</text>
+          <line x1="462" y1="48" x2="476" y2="48" stroke="#888" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <!-- 6 -->
+          <rect x="478" y="30" width="60" height="36" rx="3" fill="#fff8f7" stroke="#c8382a" stroke-width="0.8"/>
+          <text font-family="'Space Mono',monospace" font-size="7" fill="#c8382a" x="508" y="43" text-anchor="middle" font-weight="700">ALERT</text>
+          <text font-family="'DM Sans',sans-serif" font-size="7.5" fill="#555" x="508" y="55" text-anchor="middle">Flag / Notify</text>
+          <line x1="538" y1="48" x2="551" y2="48" stroke="#888" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <!-- 7 -->
+          <rect x="553" y="30" width="53" height="36" rx="3" fill="#0d1117" stroke="#0d1117" stroke-width="0.8"/>
+          <text font-family="'Space Mono',monospace" font-size="7" fill="#f7f5f0" x="579" y="43" text-anchor="middle" font-weight="700">LOG</text>
+          <text font-family="'DM Sans',sans-serif" font-size="7.5" fill="#aaa" x="579" y="55" text-anchor="middle">CSV / Cloud</text>
+        </g>
+        <!-- Step numbers -->
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#bbb" x="42" y="78" text-anchor="middle">①</text>
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#bbb" x="137" y="78" text-anchor="middle">②</text>
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#bbb" x="232" y="78" text-anchor="middle">③</text>
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#bbb" x="327" y="78" text-anchor="middle">④</text>
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#bbb" x="422" y="82" text-anchor="middle">⑤</text>
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#bbb" x="508" y="78" text-anchor="middle">⑥</text>
+        <text font-family="'Space Mono',monospace" font-size="7" fill="#bbb" x="579" y="78" text-anchor="middle">⑦</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- RESULTS DASHBOARD SCREENSHOT -->
+  <div class="section">
+    <div class="sl">05 — Results Dashboard (Live Interface)</div>
+    <div style="text-align: center; margin-top: 14px; padding: 10px 0;">
+      <img src="untitled.png" alt="Live Sensor Dashboard Screenshot" style="max-width: 100%; width: 340px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); border: 2px solid var(--ink);">
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>STUDENT MINI PROJECT REPORT · ESP32 BIOMETRIC SENSING SYSTEM</span>
+    <span>GSR + MAX30102 + DHT22 · Stress &amp; Lie Detection</span>
+    <span>2025–26</span>
+  </div>
+</div>

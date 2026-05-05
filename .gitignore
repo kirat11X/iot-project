@@ -1,0 +1,82 @@
+.codex
+.codex/
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Node dependencies and build outputs
+node_modules/
+biopulse/backend/node_modules/
+biopulse/mobile-app/node_modules/
+**/--force
+dist/
+build/
+coverage/
+.vite/
+.cache/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+ml_model/venv/
+ml_model/venv2/
+
+# PlatformIO / firmware build artifacts
+.pio/
+biopulse/firmware/.pio/
+biopulse/firmware/.vscode/
+
+# Android / Capacitor generated build artifacts
+biopulse/mobile-app/android/.gradle/
+biopulse/mobile-app/android/**/build/
+biopulse/mobile-app/android/local.properties
+*.apk
+*.aab
+
+# Local biometric readings, SQLite databases, and generated exports
+biopulse/backend/db/*.db
+biopulse/backend/db/*.db-*
+biopulse/backend/db/*.sqlite
+biopulse/backend/db/*.sqlite3
+biopulse/backend/db/*.csv
+!biopulse/backend/db/.gitkeep
+
+# ML datasets and trained artifacts are too large/sensitive for GitHub.
+# Keep source code and lightweight config in git; regenerate/download these locally.
+ml_model/data*/
+ml_model/**/*.pkl
+ml_model/**/*.pt
+ml_model/**/*.pth
+ml_model/**/*.onnx
+ml_model/**/*.joblib
+ml_model/**/*.h5
+ml_model/**/*.npy
+ml_model/**/*.npz
+
+# Local assignment handouts / scratch files
+IoT_Mini_Project.pdf
+IoT_Mini_Project.docx
+Untitled.png

@@ -1,0 +1,1 @@
+{"seq_len": 30, "stride": 1, "features": ["hr_mean_30s", "hr_std_30s", "hr_delta", "hr_max_30s", "gsr_mean_30s", "gsr_std_30s", "gsr_delta", "gsr_peak_count", "hrv_mean_30s", "hrv_drop", "heat_index", "temp_delta", "humidity_delta", "gsr_hr_product", "hrv_temp_ratio", "session_progress"], "stat_features": ["mean", "std", "min", "max", "slope"]}
